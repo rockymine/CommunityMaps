@@ -14,8 +14,9 @@
   SYMMETRIC "CAPTURE THE WOOL" WITH CAKES. Both teams attack AND defend at once:
     - RED eats the BLUE cake (7,10,27), carries it, places it on RED's monument (7,10,-25).
     - BLUE eats the RED cake (-8,10,-28), carries it, places it on BLUE's monument (-7,10,25).
-  First team to deliver the enemy cake wins (score limit 1). If the 10-min timer runs out
-  with no delivery, the higher score wins; a tie is a draw.
+  First team to deliver the enemy cake wins (score limit 1). There is NO time limit: instead
+  the Cookie Monster eats a slice out of both cakes every ${monster-interval}, so a stalemate
+  keeps getting easier to break until a cake takes a single bite to steal.
 
   CAKE HEALTH (see <constants>): *-cake-health is the number of bites a cake survives before
   the eater grabs it. 7 = a pristine cake; set it lower to start that cake PRE-DAMAGED (the
@@ -50,10 +51,12 @@
 
 <constants>
     <constant id="score-limit">1</constant>
-    <constant id="time-limit">10</constant>
     <!-- Bites each cake survives before it is grabbed. Lower = spawns pre-damaged. -->
     <constant id="blue-cake-health">7</constant>
     <constant id="red-cake-health">7</constant>
+    <!-- How often the Cookie Monster helps himself to a slice. Include the unit, so this can be
+         dropped to something like 20s for testing without touching anything else. -->
+    <constant id="monster-interval">10m</constant>
     <!-- Pulses (0.1s each) without a carrier heartbeat before the cake returns home. -->
     <constant id="return-delay">3</constant>
 </constants>
@@ -128,6 +131,11 @@
          the anti-grief source of truth and the pre-damage knob. -->
     <variable id="blue_cake_health" scope="match" default="${blue-cake-health}"/>
     <variable id="red_cake_health" scope="match" default="${red-cake-health}"/>
+    <!-- The health a cake comes BACK at. The Cookie Monster lowers this, not just the live health,
+         so his slices are permanent: without it every cake return would undo his work and the
+         match would never converge, which is the whole point of him replacing the time limit. -->
+    <variable id="blue_cake_max" scope="match" default="${blue-cake-health}"/>
+    <variable id="red_cake_max" scope="match" default="${red-cake-health}"/>
     <!-- Pulses since the carrier last checked in. See CAKE RETURN in the header comment. -->
     <variable id="blue_carrier_ticks" scope="match"/>
     <variable id="red_carrier_ticks" scope="match"/>
@@ -148,6 +156,10 @@
     <!-- a cake block sitting on either monument spot -->
     <offset id="cake-on-red-monument" vector="7,10,-25"><material>cake block:0</material></offset>
     <offset id="cake-on-blue-monument" vector="-7,10,25"><material>cake block:0</material></offset>
+    <!-- The Cookie Monster's alarm clock. <after> rises once match-started has held for the
+         interval, and the pulse below counts ITS periods from that moment - so the first visit is
+         at 1x the interval, not at t=0 the way a bare match-started pulse would fire. -->
+    <after id="monster-awake" duration="${monster-interval}" filter="match-started"/>
 </filters>
 
 <regions>
@@ -358,7 +370,7 @@
             <action filter="blue_cake_health=..0">
                 <set var="blue_carrier_ticks" value="blue_carrier_ticks+1"/>
                 <action filter="blue_carrier_ticks=${return-delay}..">
-                    <set var="blue_cake_health" value="${blue-cake-health}"/>
+                    <set var="blue_cake_health" value="blue_cake_max"/>
                     <set var="blue_carrier_ticks" value="0"/>
                     <message text="`rThe `9Blue Cake `rreturned to its spawn!"/>
                     <!-- owner (blue) hears a relieved chime, the attackers hear it slip away -->
@@ -373,7 +385,7 @@
             <action filter="red_cake_health=..0">
                 <set var="red_carrier_ticks" value="red_carrier_ticks+1"/>
                 <action filter="red_carrier_ticks=${return-delay}..">
-                    <set var="red_cake_health" value="${red-cake-health}"/>
+                    <set var="red_cake_health" value="red_cake_max"/>
                     <set var="red_carrier_ticks" value="0"/>
                     <message text="`rThe `cRed Cake `rreturned to its spawn!"/>
                     <switch-scope inner="team" filter="only-red">
@@ -405,6 +417,39 @@
         </action>
     </trigger>
 
+    <!-- THE COOKIE MONSTER. With no time limit, a stalemate would last forever, so every
+         ${monster-interval} he takes a slice out of BOTH cakes and they get easier to steal.
+         He lowers the respawn max as well as the live health, so his slices survive a cake
+         return. He never takes the last slice: at 1 health the cake still needs a real player
+         bite to be grabbed, so he can't hand anyone a capture. -->
+    <trigger scope="match">
+        <filter><pulse period="${monster-interval}" duration="0.05s" filter="monster-awake"/></filter>
+        <action>
+            <action filter="blue_cake_max=2..">
+                <set var="blue_cake_max" value="blue_cake_max-1"/>
+                <!-- only bite the cake itself if it is home and has a slice to spare; while it is
+                     being carried (health 0) he just takes it out of what it returns at -->
+                <action filter="blue_cake_health=2..">
+                    <set var="blue_cake_health" value="blue_cake_health-1"/>
+                </action>
+                <message text="`6`lThe Cookie Monster `rwandered past and ate a slice of the `9Blue Cake`r! `7({s} left)">
+                    <replacements><decimal id="s" scope="match" value="blue_cake_max" format="#"/></replacements>
+                </message>
+                <sound preset="objective fireworks twinkle"/>
+            </action>
+            <action filter="red_cake_max=2..">
+                <set var="red_cake_max" value="red_cake_max-1"/>
+                <action filter="red_cake_health=2..">
+                    <set var="red_cake_health" value="red_cake_health-1"/>
+                </action>
+                <message text="`6`lThe Cookie Monster `rwandered past and ate a slice of the `cRed Cake`r! `7({s} left)">
+                    <replacements><decimal id="s" scope="match" value="red_cake_max" format="#"/></replacements>
+                </message>
+                <sound preset="objective fireworks twinkle"/>
+            </action>
+        </action>
+    </trigger>
+
     <!-- reset the one-slice limit each time you (re)spawn -->
     <trigger scope="player" filter="alive">
         <action><set var="has_eaten" value="0"/></action>
@@ -417,7 +462,7 @@
             <sound preset="objective mode"/>
             <!-- the objective is delivered, so the cake is no longer "out": this restores it at
                  home, stops the carry watchdog, and lets the pulse clear the carrier's flag -->
-            <set var="blue_cake_health" value="${blue-cake-health}"/>
+            <set var="blue_cake_health" value="blue_cake_max"/>
             <set var="blue_carrier_ticks" value="0"/>
             <switch-scope inner="team" filter="only-red">
                 <set var="cake_score" value="cake_score+1"/>
@@ -429,7 +474,7 @@
         <action>
             <message text="`9`lBlue captured the Red Cake!"/>
             <sound preset="objective mode"/>
-            <set var="red_cake_health" value="${red-cake-health}"/>
+            <set var="red_cake_health" value="red_cake_max"/>
             <set var="red_carrier_ticks" value="0"/>
             <switch-scope inner="team" filter="only-blue">
                 <set var="cake_score" value="cake_score+1"/>
@@ -494,7 +539,8 @@
     <limit>${score-limit}</limit>
 </score>
 
-<!-- Symmetric race: first cake delivered wins (score limit above). If the timer expires with
-     no delivery, the higher score wins and an even score is a draw (no result= on <time>). -->
-<time>${time-limit}m</time>
+<!-- Symmetric race: first cake delivered wins (score limit above). There is deliberately NO
+     <time> element - the match runs until someone captures. What stops a stalemate lasting
+     forever is the Cookie Monster, who thins both cakes every ${monster-interval} until they
+     take a single bite to steal. -->
 </map>
