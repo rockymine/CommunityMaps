@@ -144,6 +144,13 @@
     <!-- Last health painted into the world. The sidebar proxy is driven with events="true" so the
          destroyable goal can see it, and <fill> fires an event per block on EVERY call (it is not
          idempotent), so the proxy may only be re-painted when the value actually changes. -->
+    <!-- 1 once that cake has actually been delivered. The proxy's LAST block is reserved for
+         this: a destroyable that reaches 100% is COMPLETE and PGM never un-completes it, so a bar
+         that hit 100% merely on pick-up would stick there for the rest of the match (verified:
+         after 100%, putting health back to 7 left it at 100%). Holding one block back means
+         normal play tops out just under 100% and stays repairable. -->
+    <variable id="blue_cake_captured" scope="match"/>
+    <variable id="red_cake_captured" scope="match"/>
     <variable id="blue_cake_painted" scope="match" default="-1"/>
     <variable id="red_cake_painted" scope="match" default="-1"/>
     <!-- Pulses since the carrier last checked in. See CAKE RETURN below. -->
@@ -218,6 +225,7 @@
     <block id="blue-proxy-5">-44,0,-30</block>
     <block id="blue-proxy-6">-43,0,-30</block>
     <block id="blue-proxy-7">-42,0,-30</block>
+    <block id="blue-proxy-8">-41,0,-30</block>
     <block id="red-proxy-1">46,0,-25</block>
     <block id="red-proxy-2">47,0,-25</block>
     <block id="red-proxy-3">48,0,-25</block>
@@ -225,8 +233,9 @@
     <block id="red-proxy-5">50,0,-25</block>
     <block id="red-proxy-6">51,0,-25</block>
     <block id="red-proxy-7">52,0,-25</block>
-    <cuboid id="blue-cake-proxy" min="-48,0,-30" max="-41,1,-29"/>
-    <cuboid id="red-cake-proxy" min="46,0,-25" max="53,1,-24"/>
+    <block id="red-proxy-8">53,0,-25</block>
+    <cuboid id="blue-cake-proxy" min="-48,0,-30" max="-40,1,-29"/>
+    <cuboid id="red-cake-proxy" min="46,0,-25" max="54,1,-24"/>
     <!-- Deliberately NOT protected by an <apply>: the proxy is driven by <fill events="true">,
          and any region rule that denies the resulting BlockFormEvent silently freezes the
          tracker (FillAction skips cancelled blocks). It needs no guard anyway - these blocks
@@ -470,41 +479,67 @@
                 </action>
             </action>
 
-            <!-- blue cake: knock out one proxy block per slice eaten (drives the sidebar) -->
+            <!-- blue cake: 7 slice blocks, plus one held back for the delivery. Block i is
+                 gone once (7 - health) >= i, so the bar tops out at 7/8 while the cake
+                 is merely stolen, and only a real capture takes it to 100%. -->
             <action filter="not(blue_cake_health-blue_cake_painted=0)">
-                <action filter="blue_cake_health=1.."><fill material="bedrock" region="blue-proxy-1" events="true"/></action>
-                <action filter="blue_cake_health=..0"><fill material="air" region="blue-proxy-1" events="true"/></action>
-                <action filter="blue_cake_health=2.."><fill material="bedrock" region="blue-proxy-2" events="true"/></action>
-                <action filter="blue_cake_health=..1"><fill material="air" region="blue-proxy-2" events="true"/></action>
-                <action filter="blue_cake_health=3.."><fill material="bedrock" region="blue-proxy-3" events="true"/></action>
-                <action filter="blue_cake_health=..2"><fill material="air" region="blue-proxy-3" events="true"/></action>
+                <action filter="blue_cake_health=7.."><fill material="bedrock" region="blue-proxy-1" events="true"/></action>
+                <action filter="blue_cake_health=..6"><fill material="air" region="blue-proxy-1" events="true"/></action>
+                <action filter="blue_cake_health=6.."><fill material="bedrock" region="blue-proxy-2" events="true"/></action>
+                <action filter="blue_cake_health=..5"><fill material="air" region="blue-proxy-2" events="true"/></action>
+                <action filter="blue_cake_health=5.."><fill material="bedrock" region="blue-proxy-3" events="true"/></action>
+                <action filter="blue_cake_health=..4"><fill material="air" region="blue-proxy-3" events="true"/></action>
                 <action filter="blue_cake_health=4.."><fill material="bedrock" region="blue-proxy-4" events="true"/></action>
                 <action filter="blue_cake_health=..3"><fill material="air" region="blue-proxy-4" events="true"/></action>
-                <action filter="blue_cake_health=5.."><fill material="bedrock" region="blue-proxy-5" events="true"/></action>
-                <action filter="blue_cake_health=..4"><fill material="air" region="blue-proxy-5" events="true"/></action>
-                <action filter="blue_cake_health=6.."><fill material="bedrock" region="blue-proxy-6" events="true"/></action>
-                <action filter="blue_cake_health=..5"><fill material="air" region="blue-proxy-6" events="true"/></action>
-                <action filter="blue_cake_health=7.."><fill material="bedrock" region="blue-proxy-7" events="true"/></action>
-                <action filter="blue_cake_health=..6"><fill material="air" region="blue-proxy-7" events="true"/></action>
+                <action filter="blue_cake_health=3.."><fill material="bedrock" region="blue-proxy-5" events="true"/></action>
+                <action filter="blue_cake_health=..2"><fill material="air" region="blue-proxy-5" events="true"/></action>
+                <action filter="blue_cake_health=2.."><fill material="bedrock" region="blue-proxy-6" events="true"/></action>
+                <action filter="blue_cake_health=..1"><fill material="air" region="blue-proxy-6" events="true"/></action>
+                <action filter="blue_cake_health=1.."><fill material="bedrock" region="blue-proxy-7" events="true"/></action>
+                <action filter="blue_cake_health=..0"><fill material="air" region="blue-proxy-7" events="true"/></action>
                 <set var="blue_cake_painted" value="blue_cake_health"/>
             </action>
-            <!-- red cake: knock out one proxy block per slice eaten (drives the sidebar) -->
+            <!-- delivered: release every block, including the reserved one -->
+            <action filter="blue_cake_captured=1">
+                <fill material="air" region="blue-proxy-1" events="true"/>
+                <fill material="air" region="blue-proxy-2" events="true"/>
+                <fill material="air" region="blue-proxy-3" events="true"/>
+                <fill material="air" region="blue-proxy-4" events="true"/>
+                <fill material="air" region="blue-proxy-5" events="true"/>
+                <fill material="air" region="blue-proxy-6" events="true"/>
+                <fill material="air" region="blue-proxy-7" events="true"/>
+                <fill material="air" region="blue-proxy-8" events="true"/>
+            </action>
+            <!-- red cake: 7 slice blocks, plus one held back for the delivery. Block i is
+                 gone once (7 - health) >= i, so the bar tops out at 7/8 while the cake
+                 is merely stolen, and only a real capture takes it to 100%. -->
             <action filter="not(red_cake_health-red_cake_painted=0)">
-                <action filter="red_cake_health=1.."><fill material="bedrock" region="red-proxy-1" events="true"/></action>
-                <action filter="red_cake_health=..0"><fill material="air" region="red-proxy-1" events="true"/></action>
-                <action filter="red_cake_health=2.."><fill material="bedrock" region="red-proxy-2" events="true"/></action>
-                <action filter="red_cake_health=..1"><fill material="air" region="red-proxy-2" events="true"/></action>
-                <action filter="red_cake_health=3.."><fill material="bedrock" region="red-proxy-3" events="true"/></action>
-                <action filter="red_cake_health=..2"><fill material="air" region="red-proxy-3" events="true"/></action>
+                <action filter="red_cake_health=7.."><fill material="bedrock" region="red-proxy-1" events="true"/></action>
+                <action filter="red_cake_health=..6"><fill material="air" region="red-proxy-1" events="true"/></action>
+                <action filter="red_cake_health=6.."><fill material="bedrock" region="red-proxy-2" events="true"/></action>
+                <action filter="red_cake_health=..5"><fill material="air" region="red-proxy-2" events="true"/></action>
+                <action filter="red_cake_health=5.."><fill material="bedrock" region="red-proxy-3" events="true"/></action>
+                <action filter="red_cake_health=..4"><fill material="air" region="red-proxy-3" events="true"/></action>
                 <action filter="red_cake_health=4.."><fill material="bedrock" region="red-proxy-4" events="true"/></action>
                 <action filter="red_cake_health=..3"><fill material="air" region="red-proxy-4" events="true"/></action>
-                <action filter="red_cake_health=5.."><fill material="bedrock" region="red-proxy-5" events="true"/></action>
-                <action filter="red_cake_health=..4"><fill material="air" region="red-proxy-5" events="true"/></action>
-                <action filter="red_cake_health=6.."><fill material="bedrock" region="red-proxy-6" events="true"/></action>
-                <action filter="red_cake_health=..5"><fill material="air" region="red-proxy-6" events="true"/></action>
-                <action filter="red_cake_health=7.."><fill material="bedrock" region="red-proxy-7" events="true"/></action>
-                <action filter="red_cake_health=..6"><fill material="air" region="red-proxy-7" events="true"/></action>
+                <action filter="red_cake_health=3.."><fill material="bedrock" region="red-proxy-5" events="true"/></action>
+                <action filter="red_cake_health=..2"><fill material="air" region="red-proxy-5" events="true"/></action>
+                <action filter="red_cake_health=2.."><fill material="bedrock" region="red-proxy-6" events="true"/></action>
+                <action filter="red_cake_health=..1"><fill material="air" region="red-proxy-6" events="true"/></action>
+                <action filter="red_cake_health=1.."><fill material="bedrock" region="red-proxy-7" events="true"/></action>
+                <action filter="red_cake_health=..0"><fill material="air" region="red-proxy-7" events="true"/></action>
                 <set var="red_cake_painted" value="red_cake_health"/>
+            </action>
+            <!-- delivered: release every block, including the reserved one -->
+            <action filter="red_cake_captured=1">
+                <fill material="air" region="red-proxy-1" events="true"/>
+                <fill material="air" region="red-proxy-2" events="true"/>
+                <fill material="air" region="red-proxy-3" events="true"/>
+                <fill material="air" region="red-proxy-4" events="true"/>
+                <fill material="air" region="red-proxy-5" events="true"/>
+                <fill material="air" region="red-proxy-6" events="true"/>
+                <fill material="air" region="red-proxy-7" events="true"/>
+                <fill material="air" region="red-proxy-8" events="true"/>
             </action>
 
             <!-- ===== RE-PAINT: health N -> cake block with (7-N) slices eaten; 0 -> air ===== -->
@@ -607,6 +642,7 @@
             <sound preset="objective mode"/>
             <!-- the objective is delivered, so the cake is no longer "out": this restores it at
                  home, stops the carry watchdog, and lets the pulse clear the carrier's flag -->
+            <set var="blue_cake_captured" value="1"/>   <!-- releases the reserved proxy block -->
             <set var="blue_cake_health" value="blue_cake_max"/>
             <set var="blue_carrier_ticks" value="0"/>
             <switch-scope inner="team" filter="only-red">
@@ -619,6 +655,7 @@
         <action>
             <message text="`9`lBlue captured the Red Cake!"/>
             <sound preset="objective mode"/>
+            <set var="red_cake_captured" value="1"/>   <!-- releases the reserved proxy block -->
             <set var="red_cake_health" value="red_cake_max"/>
             <set var="red_carrier_ticks" value="0"/>
             <switch-scope inner="team" filter="only-blue">
