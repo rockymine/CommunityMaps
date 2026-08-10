@@ -36,14 +36,18 @@
   painted from the health value, so a health of 4 spawns a cake missing 3 slices). Values above
   7 make a tougher cake that simply shows as full until 7 bites remain.
 
-  TWO THINGS THAT MUST NOT COME BACK FROM THE DTM VERSION:
-    1. <hunger><depletion>off</depletion></hunger>. HungerMatchModule reverts EVERY food change,
-       so food could never rise to 20 and no bite would ever be detected. Vanilla depletion is
-       kept instead, and the per-player pulse pins food to 19, so nobody ever actually starves.
-    2. Golden apples (the kit item, the <itemkeep> entry and the gapple-kill-reward include).
-       The eat detector keys on a food spike, so ANY edible item reads as a cake bite - a player
-       could stand looking at the enemy cake and eat their way through it without ever clicking
-       it. Nothing edible may be obtainable on this map.
+  HUNGER: bare <depletion>off</depletion> is still forbidden - on its own it means "revert every
+  food change", so food could never rise to 20 and no bite would ever be detected. That is why
+  <replenishment>on</replenishment> is mandatory next to it (PGM #1714): depletion off freezes
+  food against sprinting, replenishment on still lets a bite push 19 -> 20. Verified live on
+  PGM git-7bc56c14: 120s of jumping held food at 19 with the module, dropped to 18 without it;
+  eating raised 19 -> 20 with replenishment on and was reverted with it absent.
+
+  ONE THING THAT MUST NOT COME BACK FROM THE DTM VERSION:
+    Golden apples (the kit item, the <itemkeep> entry and the gapple-kill-reward include).
+    The eat detector keys on a food spike, so ANY edible item reads as a cake bite - a player
+    could stand looking at the enemy cake and eat their way through it without ever clicking
+    it. Nothing edible may be obtainable on this map.
 
   BLOCK RULES: Kuusepuu's own build rules are unchanged (spawns sealed, no editing outside the
   build area). On top of them the cakes and monuments are protected, and a cake may ONLY be
@@ -63,6 +67,14 @@
     <!-- Pulses (0.1s each) without a carrier heartbeat before the cake returns home. -->
     <constant id="return-delay">3</constant>
 </constants>
+
+<!-- Food is the eat detector's signal, so it has to sit still on its own. depletion=off freezes
+     it against sprinting/jumping, replenishment=on lets a bite still push it 19 -> 20. Food is
+     armed to 19 on spawn and by a kill reward; nothing else has to touch it. -->
+<hunger>
+    <depletion>off</depletion>
+    <replenishment>on</replenishment>
+</hunger>
 
 <teams>
     <team id="blue-team" color="blue" max="16">Blue</team>
@@ -460,10 +472,6 @@
 
             <!-- count the eating delay down -->
             <action filter="eat_delay=1.."><set var="eat_delay" value="eat_delay-1"/></action>
-
-            <!-- pin food: 19 while you can still eat this life, 20 (blocked) once you've eaten -->
-            <action filter="has_eaten=0"><set var="player.food" value="19"/></action>
-            <action filter="has_eaten=1"><set var="player.food" value="20"/></action>
         </action>
     </trigger>
 
